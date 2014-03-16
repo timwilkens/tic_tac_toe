@@ -6,7 +6,7 @@ use Grid;
 use AI;
 
 my $board = Grid->new();
-my $player = AI->new();
+my $player = AI->new('O');
 my $value = 'X'; # X goes first
 
 while (1) {
@@ -19,7 +19,7 @@ while (1) {
     $block = <STDIN>;
     chomp($block);
   } else {
-    $block = $player->choose_play($board, 'O');
+    $block = $player->play($board, 'O'); 
     print "$block\n";
   }
 

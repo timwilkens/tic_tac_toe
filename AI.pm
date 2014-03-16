@@ -5,82 +5,78 @@ use warnings;
 use Grid;
 use Data::Dumper;
 
-sub new {return bless {}, shift;}
+sub new {
+  my ($class, $value) = @_;
+  my %self;
+  $self{value} = $value;
+  $self{opponent} = ($value eq 'X') ? 'O' : 'X';
 
-sub choose_play {
-  my ($self, $grid, $value) = @_;
-  $self->{value} = $value;
-  my $next_play = ($value eq 'X') ? 'O' : 'X';
-
-  my @open = $grid->open();
-
-  if (scalar(@open) == 9) {
-    my @plays = (1,3,5,7,9); # Never play an edge, only the center or a corner
-
-    return $plays[int(rand(4))];
-  }
-
-  if (scalar(@open) == 1) {
-    return $open[0];     # Single open space. Only possible if AI goes first.
-  }
-
-  # Play winning move if only one away.
-  if (my $play = $self->need_to_play($grid, $value)) { return $play; }
-
-  # Block opponent if they are one move from winning.
-  if (my $play = $self->need_to_play($grid, $next_play)) { return $play; }
-
-  my %scores;
-  my $best_block;
-  my $best_score;
-
-  for my $block (@open) {
-    $grid->set($block, $value);
-
-    my $score = $self->play($grid, $next_play, 0, $best_score);
-    if (!$best_block) {
-      $best_block = $block;
-      $best_score = $score;
-    } else {
-      if ($score < $best_score) {
-        $best_block = $block;
-        $best_score = $score;
-      }
-    }
-    $grid->unset($block);
-  }
-  return $best_block;
+  return bless \%self, $class;
 }
 
 sub play {
-  my ($self, $grid, $value, $score, $best_score) = @_;
+  my ($self, $grid, $value) = @_;
+
+
+  if (scalar($grid->open()) == 9) {
+    my @plays = (1,3,5,7,9); # Only play center or corners on opening
+    return $plays[int(rand(4))];
+  }
+
+  # Play one move win.
+  if (my $play = $self->need_to_play($grid, $self->{value})) { return $play; }
+
+  # Block opponent win.
+  if (my $play = $self->need_to_play($grid, $self->{opponent})) { return $play; }
+
+  my ($play, $score) = $self->ABminimax($grid, $value, -2, 2); # Alpha and Beta initialized
+  return $play;
+}
+
+sub ABminimax {
+  my ($self, $grid, $value, $alpha, $beta) = @_;
   my $player_value = $self->{value};
-  my $opponent_value = ($self->{value} eq 'X') ? 'O' : 'X';
+  my $opponent_value = $self->{opponent};;
   my $next_play = ($value eq 'X') ? 'O' : 'X';
 
-  # Can play with weights here to change style of play
-  # This seems to reliably tie some of the smarter human strategies
   if ($grid->is_winner($player_value)) {
-    return ($score - 1);
+    return (undef, 1);
   } elsif ($grid->is_winner($opponent_value)) {
-    return ($score + 1);
+    return (undef, -1);
   } elsif ($grid->is_cats_game) {
-    return $score;
+    return (undef, 0);
   }
 
   my @open = $grid->open();
-  my @results;
+  my $best_score;
+  my $best_move;
+
+  if ($value eq $player_value) {  # Initialize current value based on
+    $best_score = $alpha;         # Max player level or Min player level
+  } else {
+    $best_score = $beta;
+  }
 
   for my $block (@open) {
-    if ($best_score && ($best_score < $score)) {  # Pruning
-      return $score;
-    }
 
-    $grid->set($block, $value);
-    $score = $self->play($grid, $next_play, $score, $best_score);
-    $grid->unset($block);
+    $grid->set($block, $value);  # Play.
+    my (undef, $play_score) = $self->ABminimax($grid, $next_play, $alpha, $beta);
+    $grid->unset($block);  # Undo.
+
+    if (($value eq $player_value) && ($play_score > $best_score)) {
+      $best_score = $play_score;
+      $alpha = $play_score;
+      $best_move = $block;
+    } elsif (($value eq $opponent_value) && ($play_score < $best_score)) {
+      $best_score = $play_score;
+      $beta = $play_score;
+      $best_move = $block;
+    }
+    if ($alpha >= $beta) {  # Prune.
+      return ($best_move, $best_score);
+    }
   }
-  return $score;
+  return ($best_move, $best_score);
 }
 
 sub need_to_play {
